@@ -2,6 +2,7 @@ import { readStdin } from './stdin.js';
 import { parseTranscript } from './transcript.js';
 import { render } from './render/index.js';
 import { countConfigs } from './config-reader.js';
+import { getConfig } from './config.js';
 import { fileURLToPath } from 'node:url';
 export async function main(overrides = {}) {
     const deps = {
@@ -9,6 +10,7 @@ export async function main(overrides = {}) {
         parseTranscript,
         countConfigs,
         render,
+        getConfig,
         now: () => Date.now(),
         log: console.log,
         ...overrides,
@@ -19,6 +21,8 @@ export async function main(overrides = {}) {
             deps.log('[claude-hud] Initializing...');
             return;
         }
+        // Load user configuration
+        const config = deps.getConfig();
         const transcriptPath = stdin.transcript_path ?? '';
         const transcript = await deps.parseTranscript(transcriptPath);
         const { claudeMdCount, rulesCount, mcpCount, hooksCount } = await deps.countConfigs(stdin.cwd);
@@ -32,7 +36,7 @@ export async function main(overrides = {}) {
             hooksCount,
             sessionDuration,
         };
-        deps.render(ctx);
+        deps.render(ctx, config);
     }
     catch (error) {
         deps.log('[claude-hud] Error:', error instanceof Error ? error.message : 'Unknown error');

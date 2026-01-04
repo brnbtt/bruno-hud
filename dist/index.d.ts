@@ -2,11 +2,13 @@ import { readStdin } from './stdin.js';
 import { parseTranscript } from './transcript.js';
 import { render } from './render/index.js';
 import { countConfigs } from './config-reader.js';
+import { getConfig } from './config.js';
 export type MainDeps = {
     readStdin: typeof readStdin;
     parseTranscript: typeof parseTranscript;
     countConfigs: typeof countConfigs;
     render: typeof render;
+    getConfig: typeof getConfig;
     now: () => number;
     log: (...args: unknown[]) => void;
 };

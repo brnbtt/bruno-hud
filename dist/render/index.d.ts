@@ -1,3 +1,4 @@
 import type { RenderContext } from '../types.js';
-export declare function render(ctx: RenderContext): void;
+import type { HudConfig } from '../config.js';
+export declare function render(ctx: RenderContext, config?: HudConfig): void;
 //# sourceMappingURL=index.d.ts.map

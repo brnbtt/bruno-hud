@@ -1,53 +1,65 @@
 import type { RenderContext } from '../types.js';
-import { yellow, green, cyan, dim } from './colors.js';
+import type { HudConfig } from '../config.js';
+import { green, cyan, dim, brightYellow } from './colors.js';
+import { getIcons, type IconMode } from './icons.js';
+import { truncatePath } from '../platform.js';
+import {
+  calculateLayout,
+  type LayoutLine,
+  type LayoutSegment,
+} from './layout.js';
 
-export function renderToolsLine(ctx: RenderContext): string | null {
+export function renderToolsLine(ctx: RenderContext, config?: HudConfig, _width?: number): LayoutLine | null {
   const { tools } = ctx.transcript;
 
   if (tools.length === 0) {
     return null;
   }
 
-  const parts: string[] = [];
+  // Use full terminal width for layout decisions (what to show)
+  const layout = calculateLayout();
+  const iconMode: IconMode = config?.iconMode ?? 'unicode';
+  const icons = getIcons(iconMode);
 
+  const left: LayoutSegment[] = [];
+  const right: LayoutSegment[] = [];
+
+  // Running tools - LEFT side (P0 critical)
   const runningTools = tools.filter((t) => t.status === 'running');
   const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
 
   for (const tool of runningTools.slice(-2)) {
-    const target = tool.target ? truncatePath(tool.target) : '';
-    parts.push(`${yellow('◐')} ${cyan(tool.name)}${target ? dim(`: ${target}`) : ''}`);
+    const target = tool.target ? truncatePath(tool.target, layout.maxPathLength) : '';
+    const runningIcon = iconMode === 'nerd' ? '\uf192' : '\u25cf'; // ●
+    const content = `${brightYellow(runningIcon)} ${cyan(tool.name)}${target ? dim(':' + target) : ''}`;
+    left.push({ content, priority: 0 });
   }
 
+  // Completed tools summary - RIGHT side (P2 secondary)
   const toolCounts = new Map<string, number>();
   for (const tool of completedTools) {
-    const count = toolCounts.get(tool.name) ?? 0;
-    toolCounts.set(tool.name, count + 1);
+    toolCounts.set(tool.name, (toolCounts.get(tool.name) ?? 0) + 1);
   }
 
   const sortedTools = Array.from(toolCounts.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
+    .slice(0, layout.maxToolsShown);
 
-  for (const [name, count] of sortedTools) {
-    parts.push(`${green('✓')} ${name} ${dim(`×${count}`)}`);
+  if (sortedTools.length > 0) {
+    const checkIcon = iconMode === 'nerd' ? icons.completed : '\u2713';
+    const completedParts = sortedTools.map(([name, count]) =>
+      `${name}${dim('\u00d7' + count)}`
+    );
+    right.push({
+      content: `${green(checkIcon)} ${completedParts.join(' ')}`,
+      priority: 2,
+    });
   }
 
-  if (parts.length === 0) {
-    return null;
+  // If no running tools, move completed to left
+  if (left.length === 0 && right.length > 0) {
+    return { left: right, right: [] };
   }
 
-  return parts.join(' | ');
-}
-
-function truncatePath(path: string, maxLen: number = 20): string {
-  if (path.length <= maxLen) return path;
-
-  const parts = path.split('/');
-  const filename = parts.pop() || path;
-
-  if (filename.length >= maxLen) {
-    return filename.slice(0, maxLen - 3) + '...';
-  }
-
-  return '.../' + filename;
+  return { left, right };
 }

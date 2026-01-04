@@ -2,6 +2,7 @@ import { readStdin } from './stdin.js';
 import { parseTranscript } from './transcript.js';
 import { render } from './render/index.js';
 import { countConfigs } from './config-reader.js';
+import { getConfig, type HudConfig } from './config.js';
 import type { RenderContext } from './types.js';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,7 @@ export type MainDeps = {
   parseTranscript: typeof parseTranscript;
   countConfigs: typeof countConfigs;
   render: typeof render;
+  getConfig: typeof getConfig;
   now: () => number;
   log: (...args: unknown[]) => void;
 };
@@ -20,6 +22,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     parseTranscript,
     countConfigs,
     render,
+    getConfig,
     now: () => Date.now(),
     log: console.log,
     ...overrides,
@@ -32,6 +35,9 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       deps.log('[claude-hud] Initializing...');
       return;
     }
+
+    // Load user configuration
+    const config = deps.getConfig();
 
     const transcriptPath = stdin.transcript_path ?? '';
     const transcript = await deps.parseTranscript(transcriptPath);
@@ -50,7 +56,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       sessionDuration,
     };
 
-    deps.render(ctx);
+    deps.render(ctx, config);
   } catch (error) {
     deps.log('[claude-hud] Error:', error instanceof Error ? error.message : 'Unknown error');
   }

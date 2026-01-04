@@ -50,4 +50,8 @@ export interface RenderContext {
     hooksCount: number;
     sessionDuration: string;
 }
+export type { HudConfig } from './config.js';
+export type { ColorMode } from './render/gradient.js';
+export type { IconMode } from './render/icons.js';
+export type { SpinnerStyle } from './render/spinner.js';
 //# sourceMappingURL=types.d.ts.map

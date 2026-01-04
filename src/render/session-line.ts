@@ -1,60 +1,101 @@
 import type { RenderContext } from '../types.js';
+import type { HudConfig } from '../config.js';
 import { getContextPercent, getModelName } from '../stdin.js';
-import { coloredBar, cyan, dim, red, getContextColor, RESET } from './colors.js';
+import { cyan, dim, red, bold } from './colors.js';
+import { gradientBar, coloredPercent, detectColorMode } from './gradient.js';
+import { getIcons, type IconMode } from './icons.js';
+import {
+  calculateLayout,
+  type LayoutLine,
+  type LayoutSegment,
+} from './layout.js';
 
-export function renderSessionLine(ctx: RenderContext): string {
+export function renderSessionLine(ctx: RenderContext, config?: HudConfig, _width?: number): LayoutLine {
   const model = getModelName(ctx.stdin);
   const percent = getContextPercent(ctx.stdin);
-  const bar = coloredBar(percent);
+  // Use full terminal width for layout decisions (what to show)
+  const layout = calculateLayout();
+  const colorMode = config?.colorMode ?? detectColorMode();
+  const iconMode: IconMode = config?.iconMode ?? 'unicode';
+  const icons = getIcons(iconMode);
 
-  const parts: string[] = [];
+  const left: LayoutSegment[] = [];
+  const right: LayoutSegment[] = [];
 
-  parts.push(`${cyan(`[${model}]`)} ${bar} ${getContextColor(percent)}${percent}%${RESET}`);
+  // LEFT SIDE (Critical info)
 
-  if (ctx.claudeMdCount > 0) {
-    parts.push(dim(`${ctx.claudeMdCount} CLAUDE.md`));
+  // Model name - P0 critical
+  left.push({
+    content: cyan(bold(model)),
+    priority: 0,
+  });
+
+  // Progress bar + percentage - P0 critical
+  const bar = gradientBar(percent, layout.barWidth, colorMode);
+  left.push({
+    content: `${bar} ${coloredPercent(percent, colorMode)}`,
+    priority: 0,
+  });
+
+  // Config counts - P2 secondary (compact format)
+  const counts: string[] = [];
+  if (ctx.claudeMdCount > 0 && config?.showClaudeMdCount !== false) {
+    counts.push(`${ctx.claudeMdCount}${iconMode === 'nerd' ? icons.claudeMd : '#'}`);
+  }
+  if (ctx.rulesCount > 0 && config?.showRulesCount !== false) {
+    counts.push(`${ctx.rulesCount}R`);
+  }
+  if (ctx.mcpCount > 0 && config?.showMcpCount !== false) {
+    counts.push(`${ctx.mcpCount}M`);
+  }
+  if (ctx.hooksCount > 0 && config?.showHooksCount !== false) {
+    counts.push(`${ctx.hooksCount}H`);
+  }
+  if (counts.length > 0) {
+    left.push({
+      content: dim(counts.join(' ')),
+      priority: 2,
+    });
   }
 
-  if (ctx.rulesCount > 0) {
-    parts.push(dim(`${ctx.rulesCount} rules`));
+  // RIGHT SIDE (Secondary info)
+
+  // Session duration - P1 important
+  if (ctx.sessionDuration && config?.showSessionDuration !== false) {
+    right.push({
+      content: dim(ctx.sessionDuration),
+      priority: 1,
+    });
   }
 
-  if (ctx.mcpCount > 0) {
-    parts.push(dim(`${ctx.mcpCount} MCPs`));
-  }
-
-  if (ctx.hooksCount > 0) {
-    parts.push(dim(`${ctx.hooksCount} hooks`));
-  }
-
-  if (ctx.sessionDuration) {
-    parts.push(dim(`⏱️  ${ctx.sessionDuration}`));
-  }
-
-  let line = parts.join(' | ');
-
+  // Token breakdown at high usage - P3 optional
   if (percent >= 85) {
     const usage = ctx.stdin.context_window?.current_usage;
     if (usage) {
       const input = formatTokens(usage.input_tokens ?? 0);
-      const cache = formatTokens((usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0));
-      line += dim(` (in: ${input}, cache: ${cache})`);
+      const cache = formatTokens(
+        (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+      );
+      right.push({
+        content: dim(`${input}+${cache}`),
+        priority: 3,
+      });
     }
   }
 
+  // Compact warning - P0 critical (always show if needed)
   if (percent >= 95) {
-    line += ` ${red('⚠️ COMPACT')}`;
+    right.push({
+      content: red(`${iconMode === 'nerd' ? icons.warning : '!'} COMPACT`),
+      priority: 0,
+    });
   }
 
-  return line;
+  return { left, right };
 }
 
 function formatTokens(n: number): string {
-  if (n >= 1000000) {
-    return `${(n / 1000000).toFixed(1)}M`;
-  }
-  if (n >= 1000) {
-    return `${(n / 1000).toFixed(0)}k`;
-  }
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
   return n.toString();
 }
